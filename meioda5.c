@@ -1,7 +1,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#define NUM_THREADS 2     
+#define NUM_THREADS 4  
 #define LINHAS 4
 #define COLUNAS 4
 
@@ -10,12 +10,12 @@ typedef struct par{
     double elemento;
 }Par;
 
-
-float resultadoPorVetor[4][1];          // Variavel para armazenar o resultado da multplicaçao pelo vetor  
+double resultadoPorMatrizDensa[4][4];    // Variavel para armazenar o resultado da multiplicacao pela matriz densa
+double resultadoPorVetor[4][1];          // Variavel para armazenar o resultado da multplicaçao pelo vetor  
 Par MatrizEsparsa[4][4];                // Variavel da matriz esparsa principal
 double VetorDenso[4] = {1,2,3,4};       // Vetor denso
 Par OutraMatrizEsparsa[4][4];           // Variavel que multiplica a matriz esparsa principal
-double MatrizDensa[4][4];               // Matriz densa
+double MatrizDensa[4][4] = {{1,2,1,2},{1,2,1,2},{1,2,1,2},{1,2,1,2}};               // Matriz densa
 double aux[4][4];                       // variavel para representar a matriz esparsa por uma matriz densa
 
                                 //  Nessa função eu preencho a matriz esparsa
@@ -107,7 +107,9 @@ void *transformaEsparsa(){
 }
                                 // Fim
 
-void *threadCode(void *tid){   
+                                
+                                // Função responsavel por multiplicar a matriz por outra, fazendo cada thread caclular o resultado linha por linha, no caso de multiplicar por vetor.
+void *multMatrizVetor(void *tid){   
 	
 	int i,j, k;
   long  threadId = (*(long *)tid); 
@@ -117,23 +119,50 @@ void *threadCode(void *tid){
 	   		if(i >= LINHAS) { return 0;}
 	   	      	
       	for (j=0;j<COLUNAS;j++) {
-        	 resultado[i][j] = 0;
+        	 resultadoPorVetor[i][j] = 0;
   
        		 for(k=0;k< COLUNAS;k++) {
-           		 resultado[i][j] = resultado[i][j] + aux[i][k]* VetorDenso[k];
+           		 resultadoPorVetor[i][j] = resultadoPorVetor[i][j] + aux[i][k]* VetorDenso[k];
        		 }
       }
        
     }
   
 }
+                                // Fim
 
+
+                                // Função responsavel por multiplicar a matriz por outra, fazendo cada thread caclular o resultado linha por linha.
+void *multMatrizDensa(void *tid){   
+	
+	int i,j, k;
+  long  threadId = (*(long *)tid); 
+	
+	   for(i=threadId; i < LINHAS; i = i + NUM_THREADS) {
+				   
+	   		if(i >= LINHAS) { return 0;}
+	   	      	
+      	for (j=0;j<COLUNAS;j++) {
+        	 resultadoPorMatrizDensa[i][j] = 0;
+  
+       		 for(k=0;k< COLUNAS;k++) {
+           		 resultadoPorMatrizDensa[i][j] = resultadoPorMatrizDensa[i][j] + aux[i][k]* MatrizDensa[k][j];
+       		 }
+      }
+       
+    }
+  
+}
+                                // Fim
+
+
+                                // Função que multiplica a matriz esparsa principal pelo vetor, que na verdade eh uma matriz de uma coluna.
 void multiplicaVetor(){
 
                      
 
-  pthread_t threads[NUM_THREADS]; 
-  long *taskids[NUM_THREADS];
+  pthread_t threads[NUM_THREADS];               // Declaro as threads 
+  long *taskids[NUM_THREADS];                   // Identidade das threads
 	int i,j,u; long t;   
 
 
@@ -146,35 +175,68 @@ void multiplicaVetor(){
 	
   for(t=0; t<NUM_THREADS; t++){
 
-    printf("No main: criando thread %ld\n", t);                       // Crio as N threads
+    printf("No multiplicaVetor : criando thread %ld\n", t+1);                       // Crio as N threads
     taskids[t] = (long *) malloc(sizeof(long)); *taskids[t] = t;
-	 	pthread_create(&threads[t],NULL,threadCode, (void *)taskids[t]);         
+	 	pthread_create(&threads[t],NULL,multMatrizVetor, (void *)taskids[t]);      // Mando as threads para a executar a rotina de threadCode.   
   }
   
   for(u=0; u<NUM_THREADS;u++){
-    long *res;
     pthread_join(threads[u], NULL);
   }   
-
   
 
   
-  for(i=0; i < LINHAS; i++) {
+  for(i=0; i < LINHAS; i++) {                                       // Printo o restultado
 			 for (j=0;j<1;j++) {
-      		 printf("%d\t", resultado[i][j]);
+      		 printf("%.1lf\t", resultadoPorVetor[i][j]);
   		 }
   		 
   		 printf("\n");
    }
     		
-   
+     
+ 
+}
+                                // Fim
+
+void multiplicaMatrizDensa(){
+    
+  pthread_t threads[NUM_THREADS];               // Declaro as threads 
+  long *taskids[NUM_THREADS];                   // Identidade das threads
+	int i,j,u; long t;   
+
+
+	
+  for(t=0; t<NUM_THREADS; t++){
+
+    printf("No multiplicaMatrizDensa : criando thread %ld\n", t+1);                       // Crio as N threads
+    taskids[t] = (long *) malloc(sizeof(long)); *taskids[t] = t;
+	 	pthread_create(&threads[t],NULL,multMatrizDensa, (void *)taskids[t]);      // Mando as threads para a executar a rotina de threadCode.   
+  }
+  
+  for(u=0; u<NUM_THREADS;u++){
+
+    pthread_join(threads[u], NULL);
+  }   
+    
+  
+
+  
+  for(i=0; i < LINHAS; i++) {                                       // Printo o restultado
+			 for (j=0;j<COLUNAS;j++) {
+      		 printf("%.1lf\t", resultadoPorMatrizDensa[i][j]);
+  		 }
+  		 
+  		 printf("\n");
+   }
+
 }
 
 
 int main (int argc, char *argv[]){   
 
-  multiplicaVetor();                      // Chamo a funçao que multiplica a Matriz Esparsa por um vetor denso
-
+        multiplicaVetor();                     // Chamo a funçao que multiplica a Matriz Esparsa por um vetor denso
+        multiplicaMatrizDensa();
 
 	
   
